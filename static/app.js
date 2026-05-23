@@ -2,6 +2,7 @@ const editor = document.querySelector("#codeEditor");
 const codeHighlight = document.querySelector("#codeHighlight code");
 const codeHighlightFrame = document.querySelector("#codeHighlight");
 const output = document.querySelector("#output");
+const prettyOutput = document.querySelector("#prettyOutput");
 const sqlLog = document.querySelector("#sqlLog");
 const statusBadge = document.querySelector("#statusBadge");
 const tableList = document.querySelector("#tableList");
@@ -260,6 +261,8 @@ async function runCode() {
   statusBadge.textContent = "Running";
   statusBadge.className = "";
   output.textContent = "";
+  prettyOutput.className = "pretty-output empty";
+  prettyOutput.textContent = "Running...";
   const response = await fetch("/api/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -270,6 +273,7 @@ async function runCode() {
   statusBadge.textContent = data.status === "ok" ? "OK" : "Error";
   statusBadge.className = data.status;
   output.textContent = formatOutput(data);
+  renderPrettyOutput(data);
   sqlLog.textContent = data.sql.map((entry) => `${entry.sql}\nparams: ${JSON.stringify(entry.params)}`).join("\n\n");
   renderDb();
 }
@@ -280,6 +284,118 @@ function formatOutput(data) {
   if (data.error) parts.push(`Friendly error: ${data.error}`);
   if (!parts.length) parts.push("(No printed output)");
   return parts.join("\n\n");
+}
+
+function renderPrettyOutput(data) {
+  const items = data.pretty || [];
+  if (data.error) {
+    prettyOutput.className = "pretty-output";
+    prettyOutput.innerHTML = `<div class="pretty-error">${escapeHtml(data.error)}</div>`;
+    return;
+  }
+  if (!items.length) {
+    prettyOutput.className = "pretty-output empty";
+    prettyOutput.textContent = "(No printed output)";
+    return;
+  }
+  prettyOutput.className = "pretty-output";
+  prettyOutput.innerHTML = items.map(renderPrettyItem).join("");
+}
+
+function renderPrettyItem(item, index) {
+  const args = item.args || [];
+  const firstArg = args[0];
+  const hasLabel = args.length > 1 && typeof firstArg === "string" && firstArg.length < 80;
+  const title = hasLabel ? firstArg : `Print ${index + 1}`;
+  const values = hasLabel ? args.slice(1) : args;
+  return `
+    <article class="pretty-card">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="pretty-card-body">
+        ${values.length ? values.map(renderPrettyValue).join("") : `<p class="pretty-text">${escapeHtml(item.text || "")}</p>`}
+      </div>
+    </article>
+  `;
+}
+
+function renderPrettyValue(value) {
+  if (value && value.type === "recordset") {
+    return `
+      <div class="pretty-record-title">${escapeHtml(value.model)} <span>${escapeHtml(value.ids.length)} records</span></div>
+      ${renderPrettyValue(value.rows)}
+    `;
+  }
+  if (value && value.type === "record") {
+    return `
+      <div class="pretty-record-title">${escapeHtml(value.model)},${escapeHtml(value.id)}</div>
+      ${renderPrettyValue(value.row)}
+    `;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return `<div class="pretty-empty-list">Empty list</div>`;
+    if (value.every(isPlainObject)) return renderPrettyTable(value);
+    if (value.every(Array.isArray)) return renderPrettyArrayTable(value);
+    return `<div class="pretty-list">${value.map((item) => `<div>${renderPrettyValue(item)}</div>`).join("")}</div>`;
+  }
+  if (isPlainObject(value)) {
+    return `
+      <dl class="pretty-kv">
+        ${Object.entries(value)
+          .map(([key, item]) => `<dt>${escapeHtml(key)}</dt><dd>${renderPrettyValue(item)}</dd>`)
+          .join("")}
+      </dl>
+    `;
+  }
+  return `<span class="pretty-scalar">${escapeHtml(formatScalar(value))}</span>`;
+}
+
+function renderPrettyTable(rows) {
+  const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))];
+  return `
+    <div class="pretty-table-wrap">
+      <table class="pretty-table">
+        <thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows
+            .map((row) => `<tr>${columns.map((column) => `<td>${renderPrettyCell(row[column])}</td>`).join("")}</tr>`)
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderPrettyArrayTable(rows) {
+  const columnCount = Math.max(...rows.map((row) => row.length));
+  const columns = Array.from({ length: columnCount }, (_, index) => `Value ${index + 1}`);
+  return `
+    <div class="pretty-table-wrap">
+      <table class="pretty-table">
+        <thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows
+            .map((row) => `<tr>${columns.map((_, index) => `<td>${renderPrettyCell(row[index])}</td>`).join("")}</tr>`)
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderPrettyCell(value) {
+  if (Array.isArray(value)) return escapeHtml(`[${value.map(formatScalar).join(", ")}]`);
+  if (isPlainObject(value)) return renderPrettyValue(value);
+  return escapeHtml(formatScalar(value));
+}
+
+function formatScalar(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  return String(value);
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !value.type;
 }
 
 function renderDb() {

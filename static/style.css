@@ -211,10 +211,44 @@ button:hover {
 .token-operator { color: var(--code-pink); }
 .token-punctuation { color: var(--code-text); }
 
-#output,
+.result-stack {
+  display: grid;
+  grid-template-rows: minmax(190px, 1fr) minmax(240px, 1.15fr);
+  min-height: 450px;
+  max-height: 720px;
+}
+
+.result-section {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.result-section + .result-section {
+  border-top: 1px solid var(--line);
+}
+
+.result-heading {
+  padding: 8px 12px;
+  background: var(--toolbar);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+#output {
+  min-height: 0;
+}
+
 #sqlLog {
   min-height: 450px;
   max-height: 630px;
+}
+
+#output,
+#sqlLog {
   overflow: auto;
   margin: 0;
   padding: 14px;
@@ -223,6 +257,118 @@ button:hover {
   border-top: 1px solid var(--code-line);
   font: 13px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
+}
+
+.pretty-output {
+  overflow: auto;
+  padding: 12px;
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.pretty-output.empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.pretty-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.pretty-card + .pretty-card {
+  margin-top: 10px;
+}
+
+.pretty-card h3 {
+  margin: 0;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--line);
+  background: var(--toolbar);
+  font-size: 14px;
+}
+
+.pretty-card-body {
+  padding: 10px;
+}
+
+.pretty-error {
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.pretty-record-title {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pretty-record-title span {
+  margin-left: 6px;
+  font-weight: 500;
+}
+
+.pretty-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.pretty-table {
+  font-size: 13px;
+}
+
+.pretty-table th,
+.pretty-table td {
+  padding: 7px 9px;
+}
+
+.pretty-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.pretty-kv dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.pretty-kv dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.pretty-list {
+  display: grid;
+  gap: 6px;
+}
+
+.pretty-scalar,
+.pretty-empty-list,
+.pretty-text {
+  font: 13px/1.5 "SFMono-Regular", Consolas, monospace;
+}
+
+.pretty-scalar {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--soft);
+}
+
+.pretty-empty-list {
+  color: var(--muted);
 }
 
 #statusBadge {

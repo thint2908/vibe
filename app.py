@@ -708,9 +708,43 @@ def execute_code(code: str) -> dict[str, Any]:
     db = Database(DB_PATH, logger)
     env = Env(db)
     stdout = io.StringIO()
+    pretty_output: list[dict[str, Any]] = []
+
+    def normalize_print_value(value: Any) -> Any:
+        if isinstance(value, Recordset):
+            return {
+                "type": "recordset",
+                "model": value.meta.name,
+                "ids": value.ids,
+                "rows": normalize_print_value(value.read()),
+            }
+        if isinstance(value, Record):
+            return {
+                "type": "record",
+                "model": value.recordset.meta.name,
+                "id": value.id,
+                "row": normalize_print_value(value.recordset.browse([value.id]).read()[0]),
+            }
+        if isinstance(value, dict):
+            return {str(key): normalize_print_value(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [normalize_print_value(item) for item in value]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        return repr(value)
+
+    def playground_print(*args: Any, sep: str = " ", end: str = "\n", **kwargs: Any) -> None:
+        print(*args, sep=sep, end=end, **kwargs)
+        pretty_output.append(
+            {
+                "args": [normalize_print_value(arg) for arg in args],
+                "text": sep.join(str(arg) for arg in args) + end,
+            }
+        )
+
     globals_dict = {
         "__builtins__": {
-            "print": print,
+            "print": playground_print,
             "len": len,
             "sum": sum,
             "min": min,
@@ -734,7 +768,14 @@ def execute_code(code: str) -> dict[str, Any]:
             status = "error"
             error = str(exc)
             print(traceback.format_exc(limit=6))
-    data = {"status": status, "output": stdout.getvalue(), "error": error, "sql": logger.entries, "db": snapshot(db)}
+    data = {
+        "status": status,
+        "output": stdout.getvalue(),
+        "pretty": pretty_output,
+        "error": error,
+        "sql": logger.entries,
+        "db": snapshot(db),
+    }
     db.close()
     return data
 

@@ -72,7 +72,16 @@
           <strong>Result</strong>
           <span id="statusBadge">Ready</span>
         </div>
-        <pre id="output">Press Run to execute the snippet.</pre>
+        <div class="result-stack">
+          <section class="result-section">
+            <div class="result-heading">Raw output</div>
+            <pre id="output">Press Run to execute the snippet.</pre>
+          </section>
+          <section class="result-section">
+            <div class="result-heading">Pretty output</div>
+            <div id="prettyOutput" class="pretty-output empty">Run a snippet to see formatted results.</div>
+          </section>
+        </div>
       </section>
     </main>
 
