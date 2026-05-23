@@ -1,4 +1,6 @@
 const editor = document.querySelector("#codeEditor");
+const codeHighlight = document.querySelector("#codeHighlight code");
+const codeHighlightFrame = document.querySelector("#codeHighlight");
 const output = document.querySelector("#output");
 const sqlLog = document.querySelector("#sqlLog");
 const statusBadge = document.querySelector("#statusBadge");
@@ -96,6 +98,7 @@ themeToggle.addEventListener("click", toggleTheme);
 document.querySelectorAll(".example-btn").forEach((button) => {
   button.addEventListener("click", () => {
     editor.value = button.dataset.code;
+    syncCodeHighlight();
     editor.focus();
   });
 });
@@ -103,10 +106,127 @@ document.querySelectorAll(".example-btn").forEach((button) => {
 function loadExample(value) {
   if (!value || !selectExamples[value]) return;
   editor.value = selectExamples[value];
+  syncCodeHighlight();
   editor.focus();
 }
 
 window.loadExample = loadExample;
+
+editor.addEventListener("input", syncCodeHighlight);
+editor.addEventListener("scroll", syncCodeScroll);
+
+function syncCodeHighlight() {
+  codeHighlight.innerHTML = highlightPython(editor.value);
+  syncCodeScroll();
+}
+
+function syncCodeScroll() {
+  codeHighlightFrame.scrollTop = editor.scrollTop;
+  codeHighlightFrame.scrollLeft = editor.scrollLeft;
+}
+
+function highlightPython(source) {
+  const keywords = new Set([
+    "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del",
+    "elif", "else", "except", "False", "finally", "for", "from", "global", "if", "import",
+    "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return",
+    "True", "try", "while", "with", "yield",
+  ]);
+  const builtins = new Set([
+    "all", "any", "bool", "dict", "enumerate", "float", "int", "len", "list", "max",
+    "min", "print", "range", "repr", "round", "set", "sorted", "str", "sum", "tuple",
+  ]);
+  let html = "";
+  let index = 0;
+
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (char === "#") {
+      const end = source.indexOf("\n", index);
+      const token = source.slice(index, end === -1 ? source.length : end);
+      html += wrapToken("comment", token);
+      index += token.length;
+      continue;
+    }
+
+    if (char === "\"" || char === "'") {
+      const token = readPythonString(source, index);
+      html += wrapToken("string", token);
+      index += token.length;
+      continue;
+    }
+
+    if (char === "@" && /[A-Za-z_]/.test(next || "")) {
+      const match = source.slice(index).match(/^@[A-Za-z_][A-Za-z0-9_.]*/);
+      html += wrapToken("decorator", match[0]);
+      index += match[0].length;
+      continue;
+    }
+
+    if (/\d/.test(char)) {
+      const match = source.slice(index).match(/^\d+(?:\.\d+)?/);
+      html += wrapToken("number", match[0]);
+      index += match[0].length;
+      continue;
+    }
+
+    if (/[A-Za-z_]/.test(char)) {
+      const match = source.slice(index).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+      const word = match[0];
+      const afterWord = source.slice(index + word.length).match(/^\s*\(/);
+      const type = keywords.has(word)
+        ? "keyword"
+        : builtins.has(word)
+          ? "builtin"
+          : afterWord
+            ? "function"
+            : "";
+      html += type ? wrapToken(type, word) : escapeHtml(word);
+      index += word.length;
+      continue;
+    }
+
+    if (/[-+*/%=!<>|&:.,()[\]{}]/.test(char)) {
+      const type = /[-+*/%=!<>|&]/.test(char) ? "operator" : "punctuation";
+      html += wrapToken(type, char);
+      index += 1;
+      continue;
+    }
+
+    html += escapeHtml(char);
+    index += 1;
+  }
+
+  return html || "\n";
+}
+
+function readPythonString(source, start) {
+  const quote = source[start];
+  const triple = source.slice(start, start + 3) === quote.repeat(3);
+  let index = start + (triple ? 3 : 1);
+
+  while (index < source.length) {
+    if (source[index] === "\\" && !triple) {
+      index += 2;
+      continue;
+    }
+    if (triple && source.slice(index, index + 3) === quote.repeat(3)) {
+      return source.slice(start, index + 3);
+    }
+    if (!triple && source[index] === quote) {
+      return source.slice(start, index + 1);
+    }
+    index += 1;
+  }
+
+  return source.slice(start);
+}
+
+function wrapToken(type, value) {
+  return `<span class="token-${type}">${escapeHtml(value)}</span>`;
+}
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -242,4 +362,5 @@ function escapeHtml(value) {
 const savedTheme = localStorage.getItem("odoo-playground-theme");
 const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 applyTheme(savedTheme || preferredTheme);
+syncCodeHighlight();
 loadState();

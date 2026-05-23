@@ -24,7 +24,10 @@
           <strong>Python snippet</strong>
           <button id="runBtn">Run</button>
         </div>
-        <textarea id="codeEditor" spellcheck="false">{{ examples[0].code }}</textarea>
+        <div class="code-editor-shell">
+          <pre id="codeHighlight" aria-hidden="true"><code></code></pre>
+          <textarea id="codeEditor" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">{{ examples[0].code }}</textarea>
+        </div>
         <div class="examples">
           <h2>Examples</h2>
           <select class="example-select" onchange="loadExample(this.value)" id="examples-select">
