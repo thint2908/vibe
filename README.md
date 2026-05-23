@@ -1,0 +1,45 @@
+# Odoo ORM Playground
+
+A local Flask app for learning Odoo-style ORM concepts without running Odoo. It uses Python classes over SQLite to mimic common recordset behavior, relational fields, command tuples, basic domains, constraints, and SQL visibility.
+
+## Run
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Open `http://127.0.0.1:5000`.
+
+The SQLite database is created automatically as `odoo_playground.sqlite3` on first run and seeded with products, categories, tags, partners, sale orders, and order lines.
+
+## What It Includes
+
+- `env['model.name']`
+- `search`, `browse`, `create`, `write`, `unlink`
+- `read`, `search_read`, `mapped`, `filtered`, `sorted`
+- `ensure_one`, `exists`, `copy`, `name_get`, `name_search`
+- many2one, one2many, many2many fields
+- Odoo-style command tuples `(0, 0, vals)` through `(6, 0, ids)`
+- simulated `_sql_constraints` for unique product `default_code` and sale order `name`
+- DB viewer, model metadata, relation diagram, cheatsheet, and SQL log
+
+## Project Structure
+
+```text
+.
+├── app.py
+├── requirements.txt
+├── README.md
+├── static
+│   ├── app.js
+│   └── style.css
+└── templates
+    └── index.html
+```
+
+## Safety Note
+
+Code execution is intentionally limited for local learning. The execution environment exposes only `env`, `print`, and a small set of harmless built-ins. It is still a Python execution playground, so do not expose it to a network or run untrusted snippets.

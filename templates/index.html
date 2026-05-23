@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Odoo ORM Playground</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Odoo ORM Playground</h1>
+        <p>Local simulator for learning recordsets, fields, relations, command tuples, and SQL effects.</p>
+      </div>
+      <div class="header-actions">
+        <button id="themeToggle" title="Toggle dark theme">Dark Theme</button>
+        <button id="resetBtn" title="Reload database state">Refresh State</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="editor-pane">
+        <div class="toolbar">
+          <strong>Python snippet</strong>
+          <button id="runBtn">Run</button>
+        </div>
+        <textarea id="codeEditor" spellcheck="false">{{ examples[0].code }}</textarea>
+        <div class="examples">
+          <h2>Examples</h2>
+          <select class="example-select" onchange="loadExample(this.value)" id="examples-select">
+            <option value="">— Chọn ví dụ —</option>
+            <optgroup label="🔍 search()">
+              <option value="search_all">search([]) — tất cả records</option>
+              <option value="search_domain">search() với domain</option>
+              <option value="search_operators">Domain operators</option>
+              <option value="search_order_limit">limit + order</option>
+            </optgroup>
+            <optgroup label="📋 Recordset methods">
+              <option value="filtered">filtered()</option>
+              <option value="mapped">mapped()</option>
+              <option value="sorted">sorted()</option>
+              <option value="browse">browse()</option>
+            </optgroup>
+            <optgroup label="✏️ CRUD">
+              <option value="create">create()</option>
+              <option value="write">write()</option>
+              <option value="unlink">unlink()</option>
+            </optgroup>
+            <optgroup label="🔗 Relations">
+              <option value="m2o">Many2one traversal</option>
+              <option value="o2m">One2many (order + lines)</option>
+            </optgroup>
+            <optgroup label="📊 Business logic">
+              <option value="revenue">Doanh thu theo khách</option>
+              <option value="inventory">Báo cáo tồn kho</option>
+              <option value="search_count">search_count()</option>
+            </optgroup>
+          </select>
+          <div class="example-list">
+            {% for example in examples %}
+              <button class="example-btn" data-code="{{ example.code | e }}">{{ loop.index }}. {{ example.title }}</button>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="output-pane">
+        <div class="toolbar">
+          <strong>Result</strong>
+          <span id="statusBadge">Ready</span>
+        </div>
+        <pre id="output">Press Run to execute the snippet.</pre>
+      </section>
+    </main>
+
+    <section class="tabs-shell">
+      <nav class="tabs">
+        <button class="tab active" data-tab="db">DB Viewer</button>
+        <button class="tab" data-tab="models">Models & Fields</button>
+        <button class="tab" data-tab="relations">Relations Diagram</button>
+        <button class="tab" data-tab="cheatsheet">ORM Cheatsheet</button>
+        <button class="tab" data-tab="logs">Logs / SQL Preview</button>
+      </nav>
+
+      <div id="tab-db" class="tab-panel active">
+        <div class="db-layout">
+          <div id="tableList" class="table-list"></div>
+          <div id="tableRows" class="table-rows"></div>
+        </div>
+      </div>
+
+      <div id="tab-models" class="tab-panel">
+        <div id="modelsView" class="models-grid"></div>
+      </div>
+
+      <div id="tab-relations" class="tab-panel">
+        <div class="diagram">
+          <div class="model-box" style="grid-area: category;">product.category</div>
+          <div class="model-box" style="grid-area: product;">product.product</div>
+          <div class="model-box" style="grid-area: tag;">product.tag</div>
+          <div class="model-box" style="grid-area: partner;">res.partner</div>
+          <div class="model-box" style="grid-area: order;">sale.order</div>
+          <div class="model-box" style="grid-area: line;">sale.order.line</div>
+          <div class="arrow product-category">product.product -> product.category</div>
+          <div class="arrow product-tag">product.product <-> product.tag</div>
+          <div class="arrow order-partner">sale.order -> res.partner</div>
+          <div class="arrow line-order">sale.order.line -> sale.order</div>
+          <div class="arrow line-product">sale.order.line -> product.product</div>
+        </div>
+      </div>
+
+      <div id="tab-cheatsheet" class="tab-panel">
+        <div class="cheatsheet">
+          <article>
+            <h3>Recordsets</h3>
+            <pre>products = env['product.product'].search([])
+len(products)
+for product in products:
+    print(product.name)</pre>
+          </article>
+          <article>
+            <h3>CRUD</h3>
+            <pre>p = env['product.product'].create({'name': 'Mouse', 'default_code': 'MOU001'})
+p.write({'list_price': 25})
+p.copy({'default_code': 'MOU002'})
+p.unlink()</pre>
+          </article>
+          <article>
+            <h3>Commands</h3>
+            <pre>(0, 0, values)  create related
+(1, id, values) update related
+(2, id)         delete related
+(3, id)         unlink relation
+(4, id)         link existing
+(5,)            clear all links
+(6, 0, ids)     replace with ids</pre>
+          </article>
+          <article>
+            <h3>Relations</h3>
+            <pre>product.categ_id
+category.product_ids
+product.tag_ids
+product.write({'categ_id': 3})
+product.write({'tag_ids': [(4, 1)]})</pre>
+          </article>
+        </div>
+      </div>
+
+      <div id="tab-logs" class="tab-panel">
+        <pre id="sqlLog">SQL statements will appear after running code.</pre>
+      </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
