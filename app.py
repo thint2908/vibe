@@ -757,14 +757,52 @@ def seed(db: Database) -> None:
 def snapshot(db: Database) -> dict[str, Any]:
     tables = [
         row["name"]
-        for row in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()
+        for row in db.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall()
     ]
     result = {}
     for table in tables:
-        rows = [dict(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall()]
-        columns = [dict(row) for row in db.execute(f"PRAGMA table_info({table})").fetchall()]
+        rows = [dict(row) for row in db.conn.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall()]
+        columns = [dict(row) for row in db.conn.execute(f"PRAGMA table_info({table})").fetchall()]
         result[table] = {"columns": columns, "rows": rows}
     return result
+
+
+def snapshot_diff(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
+    changes = []
+    for table in sorted(set(before) | set(after)):
+        before_rows = {row["id"]: row for row in before.get(table, {}).get("rows", []) if "id" in row}
+        after_rows = {row["id"]: row for row in after.get(table, {}).get("rows", []) if "id" in row}
+        table_changes = {"table": table, "created": [], "deleted": [], "updated": []}
+
+        for row_id in sorted(after_rows.keys() - before_rows.keys()):
+            table_changes["created"].append(after_rows[row_id])
+
+        for row_id in sorted(before_rows.keys() - after_rows.keys()):
+            table_changes["deleted"].append(before_rows[row_id])
+
+        for row_id in sorted(before_rows.keys() & after_rows.keys()):
+            before_row = before_rows[row_id]
+            after_row = after_rows[row_id]
+            field_changes = {
+                field: {"before": before_row.get(field), "after": after_row.get(field)}
+                for field in sorted(set(before_row) | set(after_row))
+                if before_row.get(field) != after_row.get(field)
+            }
+            if field_changes:
+                table_changes["updated"].append(
+                    {
+                        "id": row_id,
+                        "before": before_row,
+                        "after": after_row,
+                        "fields": field_changes,
+                    }
+                )
+
+        if table_changes["created"] or table_changes["deleted"] or table_changes["updated"]:
+            changes.append(table_changes)
+    return changes
 
 
 def model_metadata() -> list[dict[str, Any]]:
@@ -799,6 +837,7 @@ def execute_code(code: str) -> dict[str, Any]:
     env = Env(db)
     stdout = io.StringIO()
     pretty_output: list[dict[str, Any]] = []
+    before = snapshot(db)
 
     def normalize_print_value(value: Any) -> Any:
         if isinstance(value, Recordset):
@@ -858,13 +897,16 @@ def execute_code(code: str) -> dict[str, Any]:
             status = "error"
             error = str(exc)
             print(traceback.format_exc(limit=6))
+    after = snapshot(db)
     data = {
         "status": status,
         "output": stdout.getvalue(),
         "pretty": pretty_output,
         "error": error,
         "sql": logger.entries,
-        "db": snapshot(db),
+        "db": after,
+        "before_db": before,
+        "changes": snapshot_diff(before, after) if status == "ok" else [],
     }
     db.close()
     return data

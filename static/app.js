@@ -3,15 +3,24 @@ const codeHighlight = document.querySelector("#codeHighlight code");
 const codeHighlightFrame = document.querySelector("#codeHighlight");
 const output = document.querySelector("#output");
 const prettyOutput = document.querySelector("#prettyOutput");
+const changeSummary = document.querySelector("#changeSummary");
 const sqlLog = document.querySelector("#sqlLog");
 const statusBadge = document.querySelector("#statusBadge");
 const tableList = document.querySelector("#tableList");
 const tableRows = document.querySelector("#tableRows");
 const modelsView = document.querySelector("#modelsView");
 const themeToggle = document.querySelector("#themeToggle");
+const domainModel = document.querySelector("#domainModel");
+const domainFields = document.querySelector("#domainFields");
+const domainConditions = document.querySelector("#domainConditions");
+const domainPreview = document.querySelector("#domainPreview");
+const addDomainConditionBtn = document.querySelector("#addDomainConditionBtn");
+const buildDomainBtn = document.querySelector("#buildDomainBtn");
+const runDomainBtn = document.querySelector("#runDomainBtn");
 
 let state = { db: {}, models: [] };
 let activeTable = null;
+let domainConditionId = 0;
 
 const selectExamples = {
   search_all: `# env['product.product'] means: open the Product model.
@@ -157,6 +166,25 @@ print('Products with price >= 250:', count)`,
 document.querySelector("#runBtn").addEventListener("click", runCode);
 document.querySelector("#resetBtn").addEventListener("click", loadState);
 themeToggle.addEventListener("click", toggleTheme);
+domainModel.addEventListener("change", () => {
+  renderDomainConditions();
+  updateDomainPreview();
+});
+domainFields.addEventListener("input", updateDomainPreview);
+addDomainConditionBtn.addEventListener("click", () => {
+  addDomainCondition();
+  updateDomainPreview();
+});
+buildDomainBtn.addEventListener("click", () => {
+  editor.value = buildDomainCode();
+  syncCodeHighlight();
+  editor.focus();
+});
+runDomainBtn.addEventListener("click", () => {
+  editor.value = buildDomainCode();
+  syncCodeHighlight();
+  runCode();
+});
 
 document.querySelectorAll(".example-btn").forEach((button) => {
   button.addEventListener("click", () => {
@@ -317,12 +345,15 @@ async function loadState() {
   activeTable = activeTable || Object.keys(state.db)[0];
   renderDb();
   renderModels();
+  renderDomainBuilder();
 }
 
 async function runCode() {
   statusBadge.textContent = "Running";
   statusBadge.className = "";
   output.textContent = "";
+  changeSummary.className = "change-summary empty";
+  changeSummary.textContent = "Running...";
   prettyOutput.className = "pretty-output empty";
   prettyOutput.textContent = "Running...";
   const response = await fetch("/api/run", {
@@ -335,6 +366,7 @@ async function runCode() {
   statusBadge.textContent = data.status === "ok" ? "OK" : "Error";
   statusBadge.className = data.status;
   output.textContent = formatOutput(data);
+  renderChangeSummary(data);
   renderPrettyOutput(data);
   sqlLog.textContent = data.sql.map((entry) => `${entry.sql}\nparams: ${JSON.stringify(entry.params)}`).join("\n\n");
   renderDb();
@@ -362,6 +394,86 @@ function renderPrettyOutput(data) {
   }
   prettyOutput.className = "pretty-output";
   prettyOutput.innerHTML = items.map(renderPrettyItem).join("");
+}
+
+function renderChangeSummary(data) {
+  if (data.error) {
+    changeSummary.className = "change-summary empty";
+    changeSummary.textContent = "No database changes were saved because the snippet raised an error.";
+    return;
+  }
+
+  const changes = data.changes || [];
+  if (!changes.length) {
+    changeSummary.className = "change-summary empty";
+    changeSummary.textContent = "No database rows changed. Search/read examples usually only query data.";
+    return;
+  }
+
+  changeSummary.className = "change-summary";
+  changeSummary.innerHTML = changes.map(renderTableChange).join("");
+}
+
+function renderTableChange(change) {
+  const blocks = [];
+  if (change.created?.length) {
+    blocks.push(renderChangedRows("Created rows", "created", change.created));
+  }
+  if (change.updated?.length) {
+    blocks.push(renderUpdatedRows(change.updated));
+  }
+  if (change.deleted?.length) {
+    blocks.push(renderChangedRows("Deleted rows", "deleted", change.deleted));
+  }
+
+  return `
+    <article class="change-card">
+      <h3>${escapeHtml(change.table)}</h3>
+      ${blocks.join("")}
+    </article>
+  `;
+}
+
+function renderChangedRows(title, type, rows) {
+  return `
+    <section class="change-block ${type}">
+      <h4>${escapeHtml(title)}</h4>
+      ${renderPrettyTable(rows)}
+    </section>
+  `;
+}
+
+function renderUpdatedRows(rows) {
+  return `
+    <section class="change-block updated">
+      <h4>Updated rows</h4>
+      ${rows
+        .map(
+          (row) => `
+            <div class="field-diff">
+              <div class="field-diff-title">id ${escapeHtml(row.id)}</div>
+              <table class="diff-table">
+                <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+                <tbody>
+                  ${Object.entries(row.fields)
+                    .map(
+                      ([field, values]) => `
+                        <tr>
+                          <td>${escapeHtml(field)}</td>
+                          <td>${escapeHtml(formatScalar(values.before))}</td>
+                          <td>${escapeHtml(formatScalar(values.after))}</td>
+                        </tr>
+                      `
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          `
+        )
+        .join("")}
+    </section>
+  `;
 }
 
 function renderPrettyItem(item, index) {
@@ -525,6 +637,126 @@ function renderModels() {
     `
     )
     .join("");
+}
+
+function renderDomainBuilder() {
+  const previousModel = domainModel.value;
+  domainModel.innerHTML = state.models
+    .map((model) => `<option value="${escapeHtml(model.name)}">${escapeHtml(model.name)}</option>`)
+    .join("");
+  if (previousModel && state.models.some((model) => model.name === previousModel)) {
+    domainModel.value = previousModel;
+  } else {
+    domainModel.value = "product.product";
+  }
+  if (!domainConditions.children.length) {
+    addDomainCondition({ field: "name", operator: "ilike", value: "lap" });
+  } else {
+    renderDomainConditions();
+  }
+  updateDomainPreview();
+}
+
+function renderDomainConditions() {
+  const values = readDomainConditions();
+  domainConditions.innerHTML = "";
+  values.forEach((condition) => addDomainCondition(condition));
+}
+
+function addDomainCondition(condition = {}) {
+  const model = getDomainModel();
+  const fields = getSearchableFields(model);
+  const defaultField = fields.some((field) => field.name === condition.field)
+    ? condition.field
+    : fields[0]?.name || "id";
+  const row = document.createElement("div");
+  row.className = "domain-condition";
+  row.dataset.id = String(++domainConditionId);
+  row.innerHTML = `
+    <select class="domain-field" title="Field">
+      ${fields.map((field) => `<option value="${escapeHtml(field.name)}">${escapeHtml(field.name)} (${escapeHtml(field.type)})</option>`).join("")}
+    </select>
+    <select class="domain-operator" title="Operator">
+      ${["=", "!=", ">", ">=", "<", "<=", "ilike", "like", "in"]
+        .map((operator) => `<option value="${escapeHtml(operator)}">${escapeHtml(operator)}</option>`)
+        .join("")}
+    </select>
+    <input class="domain-value" type="text" title="Value" placeholder="value">
+    <button class="domain-remove" type="button" title="Remove condition">Remove</button>
+  `;
+  row.querySelector(".domain-field").value = defaultField;
+  row.querySelector(".domain-operator").value = condition.operator || "ilike";
+  row.querySelector(".domain-value").value = condition.value ?? "";
+  row.querySelectorAll("select, input").forEach((input) => input.addEventListener("input", updateDomainPreview));
+  row.querySelector(".domain-remove").addEventListener("click", () => {
+    row.remove();
+    if (!domainConditions.children.length) addDomainCondition();
+    updateDomainPreview();
+  });
+  domainConditions.appendChild(row);
+}
+
+function getDomainModel() {
+  return state.models.find((model) => model.name === domainModel.value) || state.models[0];
+}
+
+function getSearchableFields(model) {
+  if (!model) return [];
+  return model.fields.filter((field) => !["one2many", "many2many"].includes(field.type));
+}
+
+function readDomainConditions() {
+  return [...domainConditions.querySelectorAll(".domain-condition")].map((row) => ({
+    field: row.querySelector(".domain-field").value,
+    operator: row.querySelector(".domain-operator").value,
+    value: row.querySelector(".domain-value").value,
+  }));
+}
+
+function buildDomainCode() {
+  const model = domainModel.value || "product.product";
+  const domain = readDomainConditions()
+    .filter((condition) => condition.field)
+    .map((condition) => `(${pythonString(condition.field)}, ${pythonString(condition.operator)}, ${pythonValue(condition.value, condition.operator)})`);
+  const fields = domainFields.value
+    .split(",")
+    .map((field) => field.trim())
+    .filter(Boolean);
+  const fieldsCode = fields.length ? `[${fields.map(pythonString).join(", ")}]` : "None";
+
+  return `# Generated by the Domain Builder.
+# A domain is a list of conditions: (field, operator, value).
+records = env[${pythonString(model)}].search([${domain.join(", ")}])
+print(records)
+print(records.read(${fieldsCode}))`;
+}
+
+function updateDomainPreview() {
+  domainPreview.textContent = buildDomainCode();
+}
+
+function pythonString(value) {
+  return `'${String(value).replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+}
+
+function pythonValue(value, operator) {
+  const trimmed = String(value).trim();
+  if (operator === "in") {
+    const values = trimmed
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => parseDomainScalar(item));
+    return `[${values.join(", ")}]`;
+  }
+  return parseDomainScalar(trimmed);
+}
+
+function parseDomainScalar(value) {
+  if (value === "") return "False";
+  if (/^-?\d+(?:\.\d+)?$/.test(value)) return value;
+  if (["True", "False", "None"].includes(value)) return value;
+  return pythonString(value);
 }
 
 function escapeHtml(value) {

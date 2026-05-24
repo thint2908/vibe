@@ -65,6 +65,28 @@
             {% endfor %}
           </div>
         </div>
+        <section class="domain-builder">
+          <div class="section-title">
+            <h2>Domain Builder</h2>
+            <button id="addDomainConditionBtn" type="button">Add Condition</button>
+          </div>
+          <div class="domain-builder-grid">
+            <label>
+              Model
+              <select id="domainModel"></select>
+            </label>
+            <label>
+              Fields to print
+              <input id="domainFields" type="text" value="name" placeholder="name, list_price">
+            </label>
+          </div>
+          <div id="domainConditions" class="domain-conditions"></div>
+          <div class="domain-actions">
+            <button id="buildDomainBtn" type="button">Build Search Code</button>
+            <button id="runDomainBtn" type="button">Build & Run</button>
+          </div>
+          <pre id="domainPreview" class="domain-preview">Choose a model and condition to generate a domain.</pre>
+        </section>
       </section>
 
       <section class="output-pane">
@@ -76,6 +98,10 @@
           <section class="result-section">
             <div class="result-heading">Raw output</div>
             <pre id="output">Press Run to execute the snippet.</pre>
+          </section>
+          <section class="result-section">
+            <div class="result-heading">Before / After DB changes</div>
+            <div id="changeSummary" class="change-summary empty">Run create(), write(), unlink(), or command tuple examples to see database changes.</div>
           </section>
           <section class="result-section">
             <div class="result-heading">Pretty output</div>
