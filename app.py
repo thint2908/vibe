@@ -116,45 +116,135 @@ MODELS: dict[str, ModelMeta] = {
 
 
 EXAMPLES = [
-    {"title": "Search products", "code": "products = env['product.product'].search([])\nprint(products.read())"},
+    {
+        "title": "Search products",
+        "code": "# env['product.product'] means: open the Product model.\n"
+        "# search([]) means: search with no filter, so return all products.\n"
+        "products = env['product.product'].search([])\n"
+        "# products is a recordset: a group of product records.\n"
+        "# read() changes those records into plain dictionaries, so they are easy to print.\n"
+        "print(products.read())",
+    },
     {
         "title": "Empty recordset",
-        "code": "product = env['product.product'].search([('name', '=', 'Not Exist')])\nprint(product)\nprint(bool(product))",
+        "code": "# The domain [('name', '=', 'Not Exist')] means:\n"
+        "# find products where the name is exactly 'Not Exist'.\n"
+        "product = env['product.product'].search([('name', '=', 'Not Exist')])\n"
+        "# No product has that name, so the result is an empty recordset.\n"
+        "print(product)\n"
+        "# bool(product) tells you if the recordset has at least one record.\n"
+        "# Empty recordsets are False. Non-empty recordsets are True.\n"
+        "print(bool(product))",
     },
     {
         "title": "Many2one",
-        "code": "product = env['product.product'].search([('name', '=', 'Laptop')])\nprint(product.categ_id.name)",
+        "code": "# First, find the product named Laptop.\n"
+        "product = env['product.product'].search([('name', '=', 'Laptop')])\n"
+        "# categ_id is a Many2one field: one product belongs to one category.\n"
+        "# product.categ_id gives the related category record.\n"
+        "# .name reads the name field on that category.\n"
+        "print(product.categ_id.name)",
     },
     {
         "title": "One2many",
-        "code": "category = env['product.category'].search([('name', '=', 'Electronics')])\nprint(category.product_ids.read(['name', 'list_price']))",
+        "code": "# First, find the category named Electronics.\n"
+        "category = env['product.category'].search([('name', '=', 'Electronics')])\n"
+        "# product_ids is a One2many field: one category can have many products.\n"
+        "# It contains every product whose categ_id points to this category.\n"
+        "# read(['name', 'list_price']) prints only the fields we ask for.\n"
+        "print(category.product_ids.read(['name', 'list_price']))",
     },
     {
         "title": "Many2many",
-        "code": "product = env['product.product'].search([('name', '=', 'Laptop')])\nprint(product.tag_ids.read())",
+        "code": "# First, find the product named Laptop.\n"
+        "product = env['product.product'].search([('name', '=', 'Laptop')])\n"
+        "# tag_ids is a Many2many field: one product can have many tags,\n"
+        "# and one tag can also belong to many products.\n"
+        "# read() prints the tag records linked to Laptop.\n"
+        "print(product.tag_ids.read())",
     },
-    {"title": "ensure_one", "code": "products = env['product.product'].search([])\nproducts.ensure_one()"},
+    {
+        "title": "ensure_one",
+        "code": "# search([]) returns all products, so products has many records.\n"
+        "products = env['product.product'].search([])\n"
+        "# ensure_one() checks that the recordset has exactly one record.\n"
+        "# This example raises an error on purpose because there are many products.\n"
+        "# In real code, use ensure_one() before reading fields that need one record.\n"
+        "products.ensure_one()",
+    },
     {
         "title": "exists after unlink",
-        "code": "p = env['product.product'].create({'name': 'Temp Product', 'default_code': 'TMP001'})\nprint(p.exists().read())\np.unlink()\nprint(p.exists().read())",
+        "code": "# create() adds a new product to the database.\n"
+        "p = env['product.product'].create({'name': 'Temp Product', 'default_code': 'TMP001'})\n"
+        "# exists() checks if the record still exists in the database.\n"
+        "# Right after create(), it exists, so read() shows the product.\n"
+        "print(p.exists().read())\n"
+        "# unlink() deletes the product from the database.\n"
+        "p.unlink()\n"
+        "# p still remembers the old id, but the database row is gone.\n"
+        "# exists() returns an empty recordset after unlink().\n"
+        "print(p.exists().read())",
     },
     {
         "title": "copy",
-        "code": "p = env['product.product'].search([('name', '=', 'Laptop')])\nnew_p = p.copy({'name': 'Laptop Copy', 'default_code': 'LAPCOPY'})\nprint(new_p.read())",
+        "code": "# Find the original product that we want to duplicate.\n"
+        "p = env['product.product'].search([('name', '=', 'Laptop')])\n"
+        "# copy({...}) creates a new product using Laptop as the template.\n"
+        "# The dictionary changes fields on the new copy only.\n"
+        "new_p = p.copy({'name': 'Laptop Copy', 'default_code': 'LAPCOPY'})\n"
+        "# Print the new product record.\n"
+        "print(new_p.read())",
     },
-    {"title": "name_get", "code": "products = env['product.product'].search([])\nprint(products.name_get())"},
-    {"title": "name_search", "code": "print(env['product.product'].name_search('lap'))"},
+    {
+        "title": "name_get",
+        "code": "# Get all product records first.\n"
+        "products = env['product.product'].search([])\n"
+        "# name_get() returns a list of pairs: (record id, display name).\n"
+        "# Odoo uses this kind of result in dropdowns and relation fields.\n"
+        "print(products.name_get())",
+    },
+    {
+        "title": "name_search",
+        "code": "# name_search('lap') searches by display name.\n"
+        "# It is similar to what Odoo does when you type in a Many2one dropdown.\n"
+        "# The result is a list of (id, display name) pairs.\n"
+        "print(env['product.product'].name_search('lap'))",
+    },
     {
         "title": "read vs search_read",
-        "code": "print(env['product.product'].search([]).read(['name', 'list_price']))\nprint(env['product.product'].search_read([], ['name', 'list_price']))",
+        "code": "# This version does two steps:\n"
+        "# 1. search([]) gets all product records.\n"
+        "# 2. read([...]) prints only name and list_price.\n"
+        "print(env['product.product'].search([]).read(['name', 'list_price']))\n"
+        "# search_read(domain, fields) is a shortcut for search() then read().\n"
+        "# It returns the same kind of list of dictionaries.\n"
+        "print(env['product.product'].search_read([], ['name', 'list_price']))",
     },
     {
         "title": "many2many commands",
-        "code": "p = env['product.product'].search([('name', '=', 'Laptop')])\np.write({'tag_ids': [(6, 0, [1, 2])]})\nprint(p.tag_ids.read())",
+        "code": "# Find the Laptop product.\n"
+        "p = env['product.product'].search([('name', '=', 'Laptop')])\n"
+        "# tag_ids is Many2many, so we update it with command tuples.\n"
+        "# (6, 0, [1, 2]) means: replace all current tags with tag ids 1 and 2.\n"
+        "p.write({'tag_ids': [(6, 0, [1, 2])]})\n"
+        "# Print the tags now linked to Laptop.\n"
+        "print(p.tag_ids.read())",
     },
     {
         "title": "one2many commands",
-        "code": "order = env['sale.order'].search([('name', '=', 'SO001')])\norder.write({\n    'order_line': [\n        (0, 0, {'product_id': 1, 'quantity': 2, 'price_unit': 100})\n    ]\n})\nprint(order.order_line.read())",
+        "code": "# Find the sale order named SO001.\n"
+        "order = env['sale.order'].search([('name', '=', 'SO001')])\n"
+        "# order_line is One2many, so we update it with command tuples.\n"
+        "# (0, 0, values) means: create a new child line with these values.\n"
+        "# product_id 1 is the product on the line.\n"
+        "# quantity and price_unit are used to calculate the line amount.\n"
+        "order.write({\n"
+        "    'order_line': [\n"
+        "        (0, 0, {'product_id': 1, 'quantity': 2, 'price_unit': 100})\n"
+        "    ]\n"
+        "})\n"
+        "# Print all lines on the order, including the new one.\n"
+        "print(order.order_line.read())",
     },
 ]
 

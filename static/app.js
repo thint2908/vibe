@@ -14,81 +14,143 @@ let state = { db: {}, models: [] };
 let activeTable = null;
 
 const selectExamples = {
-  search_all: `products = env['product.product'].search([])
+  search_all: `# env['product.product'] means: open the Product model.
+# search([]) means: search with no filter, so return all products.
+products = env['product.product'].search([])
 print(products)
+# products is a recordset: a group of product records.
+# read([...]) changes records into dictionaries and prints only these fields.
 print(products.read(['name', 'default_code', 'list_price']))`,
 
-  search_domain: `products = env['product.product'].search([('categ_id', '=', 1)])
+  search_domain: `# A domain is a list of conditions used to filter records.
+# Each condition looks like: (field_name, operator, value).
+# This condition means: categ_id equals 1.
+products = env['product.product'].search([('categ_id', '=', 1)])
+# Only products in category id 1 are printed.
 print(products.read(['name', 'list_price', 'categ_id']))`,
 
-  search_operators: `expensive = env['product.product'].search([('list_price', '>=', 250)])
+  search_operators: `# Domain operators compare a field with a value.
+# '>=' means greater than or equal to.
+# This finds products with list_price at least 250.
+expensive = env['product.product'].search([('list_price', '>=', 250)])
 print('>= 250:', expensive.read(['name', 'list_price']))
 
+# 'ilike' means case-insensitive text search.
+# This finds product names containing 'lap', like 'Laptop'.
 name_match = env['product.product'].search([('name', 'ilike', 'lap')])
 print('name ilike lap:', name_match.read(['name']))`,
 
-  search_order_limit: `products = env['product.product'].search([], order='list_price desc', limit=2)
+  search_order_limit: `# order='list_price desc' sorts products by price, highest first.
+# limit=2 keeps only the first two records after sorting.
+products = env['product.product'].search([], order='list_price desc', limit=2)
+# This prints the two most expensive products.
 print(products.read(['name', 'list_price']))`,
 
-  filtered: `products = env['product.product'].search([])
+  filtered: `# First get all products from the database.
+products = env['product.product'].search([])
+# filtered(...) runs Python code on each product in the recordset.
+# Keep only products where list_price is greater than or equal to 300.
 premium = products.filtered(lambda p: p.list_price >= 300)
 print(premium.read(['name', 'list_price']))`,
 
-  mapped: `orders = env['sale.order'].search([])
+  mapped: `# First get all sale orders.
+orders = env['sale.order'].search([])
+# mapped('partner_id') takes the partner_id field from each order.
+# Because partner_id is Many2one, the result is partner records.
 partners = orders.mapped('partner_id')
+# name_get() prints each partner as (id, display name).
 print(partners.name_get())`,
 
-  sorted: `products = env['product.product'].search([])
+  sorted: `# First get all products.
+products = env['product.product'].search([])
+# sorted(key=...) reorders the recordset in Python.
+# The key says: sort using each product's list_price.
 cheap_to_expensive = products.sorted(key=lambda p: p.list_price)
 print(cheap_to_expensive.read(['name', 'list_price']))`,
 
-  browse: `product = env['product.product'].browse(1)
+  browse: `# browse(1) means: create a recordset for the product with id 1.
+# It does not search by name; it uses the exact database id.
+product = env['product.product'].browse(1)
 print(product)
+# read([...]) prints selected fields for that one product.
 print(product.read(['name', 'default_code', 'list_price']))`,
 
-  create: `product = env['product.product'].create({
+  create: `# create({...}) inserts a new product row into the database.
+# The dictionary keys are field names. The values are what we save.
+product = env['product.product'].create({
     'name': 'Keyboard',
     'default_code': 'KEY001',
     'list_price': 45,
     'categ_id': 1,
 })
+# create() returns the new product as a recordset, so we can read it.
 print(product.read())`,
 
-  write: `product = env['product.product'].search([('name', '=', 'Laptop')])
+  write: `# First find the product named Laptop.
+product = env['product.product'].search([('name', '=', 'Laptop')])
+# write({...}) updates fields on every record in product.
+# Here it changes the price and category.
 product.write({'list_price': 1150, 'categ_id': 1})
 print(product.read(['name', 'list_price', 'categ_id']))`,
 
-  unlink: `product = env['product.product'].create({'name': 'Delete Me', 'default_code': 'DEL001'})
+  unlink: `# Create a temporary product so this example can delete it safely.
+product = env['product.product'].create({'name': 'Delete Me', 'default_code': 'DEL001'})
+# Before deleting, exists() returns the product because it is in the database.
 print('before:', product.exists().read())
+# unlink() deletes the record from the database.
 product.unlink()
+# After deleting, product still has the old id in memory.
+# exists() checks the database and returns an empty recordset.
 print('after:', product.exists().read())`,
 
-  m2o: `order = env['sale.order'].search([('name', '=', 'SO001')])
+  m2o: `# First find sale order SO001.
+order = env['sale.order'].search([('name', '=', 'SO001')])
+# partner_id is Many2one: one order has one customer.
+# order.partner_id gives the related customer record.
 print(order.partner_id.name)
 
+# order_line is One2many: one order can have many lines.
+# Sort the lines by id and keep only the first line.
 line = order.order_line.sorted(key=lambda line: line.id).limit(1)
+# product_id is Many2one: one line points to one product.
 print(line.product_id.name)`,
 
-  o2m: `order = env['sale.order'].search([('name', '=', 'SO001')])
+  o2m: `# First find sale order SO001.
+order = env['sale.order'].search([('name', '=', 'SO001')])
+# order.order_line returns all sale order lines that belong to this order.
+# The for loop reads one line at a time.
 for line in order.order_line:
+    # For each line, print product name, quantity, and unit price.
     print(line.product_id.name, line.quantity, line.price_unit)`,
 
-  revenue: `partners = env['res.partner'].search([])
+  revenue: `# Get all customers.
+partners = env['res.partner'].search([])
+# Loop over one customer at a time.
 for partner in partners:
+    # Find this customer's sale orders.
     orders = env['sale.order'].search([('partner_id', '=', partner.id)])
     total = 0
+    # Add every order line amount into total.
     for order in orders:
         for line in order.order_line:
+            # Line amount = quantity multiplied by price_unit.
             total = total + line.quantity * line.price_unit
     print(partner.name, total)`,
 
-  inventory: `products = env['product.product'].search([])
+  inventory: `# Get all products.
+products = env['product.product'].search([])
+# Loop over one product at a time.
 for product in products:
+    # Find sale order lines that use this product.
     lines = env['sale.order.line'].search([('product_id', '=', product.id)])
+    # sum(...) adds the quantity from every matching line.
     sold_qty = sum(line.quantity for line in lines)
     print(product.name, 'sold quantity:', sold_qty)`,
 
-  search_count: `count = env['product.product'].search_count([('list_price', '>=', 250)])
+  search_count: `# search_count(domain) counts matching records.
+# It does not return the records themselves, only a number.
+# This counts products with list_price greater than or equal to 250.
+count = env['product.product'].search_count([('list_price', '>=', 250)])
 print('Products with price >= 250:', count)`,
 };
 
