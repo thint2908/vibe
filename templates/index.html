@@ -116,6 +116,7 @@
         <button class="tab active" data-tab="db">DB Viewer</button>
         <button class="tab" data-tab="models">Models & Fields</button>
         <button class="tab" data-tab="relations">Relations Diagram</button>
+        <button class="tab" data-tab="lessons">ORM Lessons</button>
         <button class="tab" data-tab="cheatsheet">ORM Cheatsheet</button>
         <button class="tab" data-tab="logs">Logs / SQL Preview</button>
       </nav>
@@ -145,6 +146,10 @@
           <div class="arrow line-order">sale.order.line -> sale.order</div>
           <div class="arrow line-product">sale.order.line -> product.product</div>
         </div>
+      </div>
+
+      <div id="tab-lessons" class="tab-panel">
+        <div id="lessonsView" class="lessons-grid"></div>
       </div>
 
       <div id="tab-cheatsheet" class="tab-panel">

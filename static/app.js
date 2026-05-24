@@ -9,6 +9,7 @@ const statusBadge = document.querySelector("#statusBadge");
 const tableList = document.querySelector("#tableList");
 const tableRows = document.querySelector("#tableRows");
 const modelsView = document.querySelector("#modelsView");
+const lessonsView = document.querySelector("#lessonsView");
 const themeToggle = document.querySelector("#themeToggle");
 const domainModel = document.querySelector("#domainModel");
 const domainFields = document.querySelector("#domainFields");
@@ -162,6 +163,121 @@ for product in products:
 count = env['product.product'].search_count([('list_price', '>=', 250)])
 print('Products with price >= 250:', count)`,
 };
+
+const ormLessons = [
+  {
+    method: "search",
+    explanation: "Find records that match a domain. An empty domain returns every record for the model.",
+    code: `products = env['product.product'].search([('list_price', '>=', 250)])
+print(products)
+print(products.read(['name', 'list_price']))`,
+    expected: `product.product(...)
+A list of products whose list_price is at least 250.`,
+  },
+  {
+    method: "browse",
+    explanation: "Build a recordset from known database IDs. It does not search; it points directly to those IDs.",
+    code: `product = env['product.product'].browse(1)
+print(product)
+print(product.read(['name', 'default_code']))`,
+    expected: `product.product(1,)
+The product with id 1, usually Laptop in the seed data.`,
+  },
+  {
+    method: "create",
+    explanation: "Insert a new row and return the new record as a recordset.",
+    code: `product = env['product.product'].create({
+    'name': 'Lesson Mouse',
+    'default_code': 'LESSON-MOUSE',
+    'list_price': 25,
+    'categ_id': 1,
+})
+print(product.read(['name', 'default_code', 'list_price']))`,
+    expected: `A new product row appears in product_product.
+Before / After shows a created row.`,
+  },
+  {
+    method: "write",
+    explanation: "Update fields on every record in the recordset.",
+    code: `product = env['product.product'].search([('name', '=', 'Laptop')])
+product.write({'list_price': 1150})
+print(product.read(['name', 'list_price']))`,
+    expected: `Laptop list_price changes to 1150.
+Before / After shows list_price before and after.`,
+  },
+  {
+    method: "unlink",
+    explanation: "Delete records from the database. Use it carefully in real Odoo modules.",
+    code: `product = env['product.product'].create({'name': 'Lesson Delete', 'default_code': 'LESSON-DEL'})
+print('before:', product.exists().read(['name']))
+product.unlink()
+print('after:', product.exists().read(['name']))`,
+    expected: `before: one temporary product
+after: an empty list
+Before / After shows created and deleted effects during the snippet.`,
+  },
+  {
+    method: "read",
+    explanation: "Convert records into plain dictionaries, optionally limited to selected fields.",
+    code: `products = env['product.product'].search([], limit=2)
+print(products.read(['name', 'list_price']))`,
+    expected: `A list of dictionaries like:
+[{'name': 'Laptop', 'list_price': 1200.0}, ...]`,
+  },
+  {
+    method: "search_read",
+    explanation: "Shortcut for search(domain).read(fields). Useful for quick list-style data reads.",
+    code: `rows = env['product.product'].search_read(
+    [('categ_id', '=', 1)],
+    ['name', 'list_price']
+)
+print(rows)`,
+    expected: `A list of dictionaries for products in category id 1.`,
+  },
+  {
+    method: "filtered",
+    explanation: "Filter an existing recordset in Python using a function or lambda.",
+    code: `products = env['product.product'].search([])
+premium = products.filtered(lambda product: product.list_price >= 300)
+print(premium.read(['name', 'list_price']))`,
+    expected: `Only products from the original recordset with list_price >= 300.`,
+  },
+  {
+    method: "mapped",
+    explanation: "Collect one field from every record. Relation fields return a merged recordset.",
+    code: `orders = env['sale.order'].search([])
+partners = orders.mapped('partner_id')
+print(partners)
+print(partners.name_get())`,
+    expected: `A res.partner recordset, then display names for the customers on the orders.`,
+  },
+  {
+    method: "sorted",
+    explanation: "Sort a recordset in Python without changing database rows.",
+    code: `products = env['product.product'].search([])
+ordered = products.sorted(key=lambda product: product.list_price)
+print(ordered.read(['name', 'list_price']))`,
+    expected: `Products printed from cheapest to most expensive.`,
+  },
+  {
+    method: "exists",
+    explanation: "Keep only records that still exist in the database.",
+    code: `product = env['product.product'].create({'name': 'Lesson Exists', 'default_code': 'LESSON-EXISTS'})
+print(product.exists())
+product.unlink()
+print(product.exists())`,
+    expected: `Before unlink: product.product(id,)
+After unlink: product.product()`,
+  },
+  {
+    method: "ensure_one",
+    explanation: "Assert that a recordset contains exactly one record. It raises an error for zero or many records.",
+    code: `products = env['product.product'].search([])
+products.ensure_one()`,
+    expected: `Friendly error:
+Expected one record in product.product, got the current product count.`,
+  },
+];
 
 document.querySelector("#runBtn").addEventListener("click", runCode);
 document.querySelector("#resetBtn").addEventListener("click", loadState);
@@ -345,6 +461,7 @@ async function loadState() {
   activeTable = activeTable || Object.keys(state.db)[0];
   renderDb();
   renderModels();
+  renderLessons();
   renderDomainBuilder();
 }
 
@@ -637,6 +754,45 @@ function renderModels() {
     `
     )
     .join("");
+}
+
+function renderLessons() {
+  lessonsView.innerHTML = ormLessons
+    .map(
+      (lesson, index) => `
+        <article class="lesson-card">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-number">${index + 1}</span>
+              <h3>${escapeHtml(lesson.method)}</h3>
+            </div>
+            <button class="lesson-run" type="button" data-lesson="${index}">Load Code</button>
+          </div>
+          <p>${escapeHtml(lesson.explanation)}</p>
+          <div class="lesson-columns">
+            <section>
+              <h4>Runnable code</h4>
+              <pre>${escapeHtml(lesson.code)}</pre>
+            </section>
+            <section>
+              <h4>Expected output</h4>
+              <pre>${escapeHtml(lesson.expected)}</pre>
+            </section>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+
+  lessonsView.querySelectorAll(".lesson-run").forEach((button) => {
+    button.addEventListener("click", () => {
+      const lesson = ormLessons[Number(button.dataset.lesson)];
+      editor.value = lesson.code;
+      syncCodeHighlight();
+      editor.focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
 }
 
 function renderDomainBuilder() {
