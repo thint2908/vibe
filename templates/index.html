@@ -13,8 +13,9 @@
         <p>Local simulator for learning recordsets, fields, relations, command tuples, and SQL effects.</p>
       </div>
       <div class="header-actions">
+        <a class="button-link" href="{{ url_for('sql_playground') }}">SQL Playground</a>
         <button id="themeToggle" title="Toggle dark theme">Dark Theme</button>
-        <button id="resetBtn" title="Reload database state">Refresh State</button>
+        <button id="resetBtn" title="Reset sample database">Reset DB</button>
       </div>
     </header>
 
@@ -133,18 +134,70 @@
       </div>
 
       <div id="tab-relations" class="tab-panel">
-        <div class="diagram">
-          <div class="model-box" style="grid-area: category;">product.category</div>
-          <div class="model-box" style="grid-area: product;">product.product</div>
-          <div class="model-box" style="grid-area: tag;">product.tag</div>
-          <div class="model-box" style="grid-area: partner;">res.partner</div>
-          <div class="model-box" style="grid-area: order;">sale.order</div>
-          <div class="model-box" style="grid-area: line;">sale.order.line</div>
-          <div class="arrow product-category">product.product -> product.category</div>
-          <div class="arrow product-tag">product.product <-> product.tag</div>
-          <div class="arrow order-partner">sale.order -> res.partner</div>
-          <div class="arrow line-order">sale.order.line -> sale.order</div>
-          <div class="arrow line-product">sale.order.line -> product.product</div>
+        <div class="relation-visualizer">
+          <article class="relation-path">
+            <div class="relation-model">
+              <span>Model</span>
+              <strong>sale.order</strong>
+            </div>
+            <div class="relation-link many2one">
+              <span>Many2one</span>
+              <strong>partner_id</strong>
+              <small>one order has one customer</small>
+            </div>
+            <div class="relation-model">
+              <span>Related model</span>
+              <strong>res.partner</strong>
+            </div>
+          </article>
+
+          <article class="relation-path">
+            <div class="relation-model">
+              <span>Model</span>
+              <strong>sale.order</strong>
+            </div>
+            <div class="relation-link one2many">
+              <span>One2many</span>
+              <strong>order_line</strong>
+              <small>one order has many lines</small>
+            </div>
+            <div class="relation-model">
+              <span>Related model</span>
+              <strong>sale.order.line</strong>
+            </div>
+          </article>
+
+          <article class="relation-path">
+            <div class="relation-model">
+              <span>Model</span>
+              <strong>sale.order.line</strong>
+            </div>
+            <div class="relation-link many2one">
+              <span>Many2one</span>
+              <strong>product_id</strong>
+              <small>one line points to one product</small>
+            </div>
+            <div class="relation-model">
+              <span>Related model</span>
+              <strong>product.product</strong>
+            </div>
+          </article>
+
+          <article class="relation-path">
+            <div class="relation-model">
+              <span>Model</span>
+              <strong>product.product</strong>
+            </div>
+            <div class="relation-link many2many">
+              <span>Many2many</span>
+              <strong>tag_ids</strong>
+              <small>products and tags can both have many links</small>
+            </div>
+            <div class="relation-model">
+              <span>Related model</span>
+              <strong>product.tag</strong>
+            </div>
+          </article>
         </div>
       </div>
 

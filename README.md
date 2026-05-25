@@ -15,6 +15,8 @@ Open `http://127.0.0.1:5000`.
 
 The SQLite database is created automatically as `odoo_playground.sqlite3` on first run and seeded with products, categories, tags, partners, sale orders, and order lines.
 
+Open `http://127.0.0.1:5000/sql` for the SQL playground. It uses the same sample database so you can compare ORM behavior with the SQL underneath it.
+
 ## What It Includes
 
 - `env['model.name']`
@@ -25,6 +27,7 @@ The SQLite database is created automatically as `odoo_playground.sqlite3` on fir
 - Odoo-style command tuples `(0, 0, vals)` through `(6, 0, ids)`
 - simulated `_sql_constraints` for unique product `default_code` and sale order `name`
 - DB viewer, model metadata, relation diagram, cheatsheet, and SQL log
+- SQL playground page with runnable queries, examples, lessons, schema reference, DB viewer, before/after changes, and query history
 
 ## Project Structure
 

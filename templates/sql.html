@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SQL Playground</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>SQL Playground</h1>
+        <p>Run SQL directly against the same sample database used by the ORM playground.</p>
+      </div>
+      <div class="header-actions">
+        <a class="button-link" href="{{ url_for('index') }}">ORM Playground</a>
+        <button id="themeToggle" title="Toggle dark theme">Dark Theme</button>
+        <button id="resetBtn" title="Reset sample database">Reset DB</button>
+      </div>
+    </header>
+
+    <main class="workspace sql-workspace">
+      <section class="editor-pane">
+        <div class="toolbar">
+          <strong>SQL editor</strong>
+          <button id="runSqlBtn">Run</button>
+        </div>
+        <div class="code-editor-shell">
+          <pre id="sqlHighlight" aria-hidden="true"><code></code></pre>
+          <textarea id="sqlEditor" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">SELECT id, name, list_price
+FROM product_product
+ORDER BY list_price DESC;</textarea>
+        </div>
+        <div class="examples">
+          <h2>Examples</h2>
+          <select id="sqlExampleSelect" class="example-select">
+            <option value="">Choose SQL example</option>
+          </select>
+          <div id="sqlExampleList" class="example-list"></div>
+        </div>
+      </section>
+
+      <section class="output-pane">
+        <div class="toolbar">
+          <strong>Result</strong>
+          <span id="statusBadge">Ready</span>
+        </div>
+        <div class="result-stack sql-result-stack">
+          <section class="result-section">
+            <div class="result-heading">Query result</div>
+            <div id="sqlResult" class="pretty-output empty">Press Run to execute SQL.</div>
+          </section>
+          <section class="result-section">
+            <div class="result-heading">Before / After DB changes</div>
+            <div id="changeSummary" class="change-summary empty">Run INSERT, UPDATE, DELETE, or DDL queries to see database changes.</div>
+          </section>
+          <section class="result-section">
+            <div class="result-heading">Executed SQL</div>
+            <pre id="sqlLog">SQL statements will appear after running a query.</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <section class="tabs-shell">
+      <nav class="tabs">
+        <button class="tab active" data-tab="db">DB Viewer</button>
+        <button class="tab" data-tab="schema">Schema & Relations</button>
+        <button class="tab" data-tab="lessons">SQL Lessons</button>
+        <button class="tab" data-tab="cheatsheet">SQL Cheatsheet</button>
+        <button class="tab" data-tab="history">Query History</button>
+      </nav>
+
+      <div id="tab-db" class="tab-panel active">
+        <div class="db-layout">
+          <div id="tableList" class="table-list"></div>
+          <div id="tableRows" class="table-rows"></div>
+        </div>
+      </div>
+
+      <div id="tab-schema" class="tab-panel">
+        <div id="schemaView" class="models-grid"></div>
+      </div>
+
+      <div id="tab-lessons" class="tab-panel">
+        <div id="sqlLessonsView" class="lessons-grid"></div>
+      </div>
+
+      <div id="tab-cheatsheet" class="tab-panel">
+        <div id="sqlCheatsheet" class="cheatsheet"></div>
+      </div>
+
+      <div id="tab-history" class="tab-panel">
+        <div id="queryHistory" class="query-history empty">Run SQL to build history.</div>
+      </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='sql_app.js') }}"></script>
+  </body>
+</html>

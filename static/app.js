@@ -280,7 +280,7 @@ Expected one record in product.product, got the current product count.`,
 ];
 
 document.querySelector("#runBtn").addEventListener("click", runCode);
-document.querySelector("#resetBtn").addEventListener("click", loadState);
+document.querySelector("#resetBtn").addEventListener("click", resetState);
 themeToggle.addEventListener("click", toggleTheme);
 domainModel.addEventListener("change", () => {
   renderDomainConditions();
@@ -463,6 +463,22 @@ async function loadState() {
   renderModels();
   renderLessons();
   renderDomainBuilder();
+}
+
+async function resetState() {
+  const response = await fetch("/api/reset", { method: "POST" });
+  state = await response.json();
+  activeTable = Object.keys(state.db)[0];
+  renderDb();
+  renderModels();
+  renderLessons();
+  renderDomainBuilder();
+  output.textContent = "Database reset to seed data.";
+  changeSummary.className = "change-summary empty";
+  changeSummary.textContent = "Run create(), write(), unlink(), or command tuple examples to see database changes.";
+  prettyOutput.className = "pretty-output empty";
+  prettyOutput.textContent = "Run a snippet to see formatted results.";
+  sqlLog.textContent = "SQL statements will appear after running code.";
 }
 
 async function runCode() {

@@ -754,6 +754,16 @@ def seed(db: Database) -> None:
     )
 
 
+def reset_db() -> None:
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    init_db()
+
+
+def quote_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
 def snapshot(db: Database) -> dict[str, Any]:
     tables = [
         row["name"]
@@ -763,8 +773,9 @@ def snapshot(db: Database) -> dict[str, Any]:
     ]
     result = {}
     for table in tables:
-        rows = [dict(row) for row in db.conn.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall()]
-        columns = [dict(row) for row in db.conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        table_sql = quote_identifier(table)
+        rows = [dict(row) for row in db.conn.execute(f"SELECT * FROM {table_sql} ORDER BY 1").fetchall()]
+        columns = [dict(row) for row in db.conn.execute(f"PRAGMA table_info({table_sql})").fetchall()]
         result[table] = {"columns": columns, "rows": rows}
     return result
 
@@ -912,12 +923,85 @@ def execute_code(code: str) -> dict[str, Any]:
     return data
 
 
+def split_sql_statements(script: str) -> list[str]:
+    statements = []
+    buffer = ""
+    for line in script.splitlines(True):
+        buffer += line
+        if sqlite3.complete_statement(buffer):
+            statement = buffer.strip()
+            if statement:
+                statements.append(statement)
+            buffer = ""
+    if buffer.strip():
+        statements.append(buffer.strip())
+    return statements
+
+
+def execute_sql(script: str) -> dict[str, Any]:
+    db = Database(DB_PATH)
+    before = snapshot(db)
+    statements = split_sql_statements(script)
+    results: list[dict[str, Any]] = []
+    status = "ok"
+    error = None
+
+    try:
+        for statement in statements:
+            cursor = db.execute(statement)
+            if cursor.description:
+                columns = [column[0] for column in cursor.description]
+                rows = [dict(row) for row in cursor.fetchall()]
+                results.append(
+                    {
+                        "type": "rows",
+                        "statement": statement,
+                        "columns": columns,
+                        "rows": rows,
+                        "row_count": len(rows),
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "type": "change",
+                        "statement": statement,
+                        "row_count": cursor.rowcount,
+                        "lastrowid": cursor.lastrowid,
+                    }
+                )
+        if db.conn.in_transaction:
+            db.commit()
+    except Exception as exc:
+        db.conn.rollback()
+        status = "error"
+        error = str(exc)
+
+    after = snapshot(db)
+    data = {
+        "status": status,
+        "error": error,
+        "results": results,
+        "sql": db.logger.entries,
+        "db": after,
+        "before_db": before,
+        "changes": snapshot_diff(before, after) if status == "ok" else [],
+    }
+    db.close()
+    return data
+
+
 app = Flask(__name__)
 
 
 @app.route("/")
 def index():
     return render_template("index.html", examples=EXAMPLES)
+
+
+@app.route("/sql")
+def sql_playground():
+    return render_template("sql.html")
 
 
 @app.get("/api/state")
@@ -932,6 +1016,21 @@ def state():
 def run_code():
     payload = request.get_json(force=True)
     return jsonify(execute_code(payload.get("code", "")))
+
+
+@app.post("/api/sql/run")
+def run_sql():
+    payload = request.get_json(force=True)
+    return jsonify(execute_sql(payload.get("sql", "")))
+
+
+@app.post("/api/reset")
+def reset_state():
+    reset_db()
+    db = Database(DB_PATH)
+    data = {"db": snapshot(db), "models": model_metadata(), "examples": EXAMPLES}
+    db.close()
+    return jsonify(data)
 
 
 if __name__ == "__main__":
