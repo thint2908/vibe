@@ -20,6 +20,12 @@ const resetBtn = document.querySelector("#resetBtn");
 let state = { db: {}, models: [] };
 let activeTable = null;
 let history = [];
+let tablePages = {};
+let lastRunData = null;
+let rawTexts = {};
+const TABLE_PAGE_SIZE = 25;
+const RAW_TEXT_LINES = 24;
+const RAW_TEXT_CHARS = 2400;
 
 const sqlExamples = [
   {
@@ -268,6 +274,24 @@ sqlExampleSelect.addEventListener("change", () => {
   const example = sqlExamples.find((item) => item.key === sqlExampleSelect.value);
   if (example) loadSql(example.sql);
 });
+document.addEventListener("click", (event) => {
+  const pageButton = event.target.closest("[data-table-page]");
+  if (pageButton) {
+    tablePages[pageButton.dataset.tablePage] = Number(pageButton.dataset.page);
+    if (lastRunData) {
+      renderSqlResult(lastRunData);
+      renderChangeSummary(lastRunData);
+    }
+    renderDb();
+    return;
+  }
+
+  const rawToggle = event.target.closest("[data-raw-toggle]");
+  if (rawToggle) {
+    sqlLog.dataset.expanded = sqlLog.dataset.expanded === "true" ? "false" : "true";
+    renderRawText(sqlLog, rawTexts[rawToggle.dataset.rawToggle] || sqlLog.textContent, rawToggle.dataset.rawToggle);
+  }
+});
 
 document.querySelectorAll(".tab").forEach((button) => {
   button.addEventListener("click", () => {
@@ -297,6 +321,8 @@ async function resetState() {
   state = await response.json();
   activeTable = Object.keys(state.db)[0];
   history = [];
+  lastRunData = null;
+  tablePages = {};
   renderDb();
   renderSchema();
   renderHistory();
@@ -304,7 +330,8 @@ async function resetState() {
   sqlResult.textContent = "Database reset to seed data.";
   changeSummary.className = "change-summary empty";
   changeSummary.textContent = "Run INSERT, UPDATE, DELETE, or DDL queries to see database changes.";
-  sqlLog.textContent = "SQL statements will appear after running a query.";
+  sqlLog.dataset.expanded = "false";
+  renderRawText(sqlLog, "SQL statements will appear after running a query.", "sqlLog");
   statusBadge.textContent = "Ready";
   statusBadge.className = "";
 }
@@ -324,6 +351,8 @@ async function runSql() {
   });
   const data = await response.json();
   state.db = data.db;
+  lastRunData = data;
+  tablePages = {};
   statusBadge.textContent = data.status === "ok" ? "OK" : "Error";
   statusBadge.className = data.status;
   renderSqlResult(data);
@@ -357,7 +386,7 @@ function renderStatementResult(result, index) {
         <h3>${title} <span>${escapeHtml(result.row_count)} rows</span></h3>
         <div class="pretty-card-body">
           <pre class="statement-preview">${escapeHtml(result.statement)}</pre>
-          ${result.rows.length ? renderTable(result.rows, result.columns) : `<div class="pretty-empty-list">No rows returned</div>`}
+          ${result.rows.length ? renderTable(result.rows, result.columns, `result-${index}`) : `<div class="pretty-empty-list">No rows returned</div>`}
         </div>
       </article>
     `;
@@ -391,9 +420,9 @@ function renderChangeSummary(data) {
 
 function renderTableChange(change) {
   const blocks = [];
-  if (change.created?.length) blocks.push(renderChangedRows("Created rows", "created", change.created));
+  if (change.created?.length) blocks.push(renderChangedRows("Created rows", "created", change.created, change.table));
   if (change.updated?.length) blocks.push(renderUpdatedRows(change.updated));
-  if (change.deleted?.length) blocks.push(renderChangedRows("Deleted rows", "deleted", change.deleted));
+  if (change.deleted?.length) blocks.push(renderChangedRows("Deleted rows", "deleted", change.deleted, change.table));
   return `
     <article class="change-card">
       <h3>${escapeHtml(change.table)}</h3>
@@ -402,11 +431,11 @@ function renderTableChange(change) {
   `;
 }
 
-function renderChangedRows(title, type, rows) {
+function renderChangedRows(title, type, rows, tableName) {
   return `
     <section class="change-block ${type}">
       <h4>${escapeHtml(title)}</h4>
-      ${renderTable(rows)}
+      ${renderTable(rows, null, `change-${tableName}-${type}-${title}`)}
     </section>
   `;
 }
@@ -445,7 +474,8 @@ function renderUpdatedRows(rows) {
 }
 
 function renderSqlLog(data) {
-  sqlLog.textContent = data.sql.map((entry) => entry.sql).join("\n\n");
+  sqlLog.dataset.expanded = "false";
+  renderRawText(sqlLog, data.sql.map((entry) => entry.sql).join("\n\n"), "sqlLog");
 }
 
 function addHistory(data) {
@@ -506,7 +536,7 @@ function renderDb() {
   }
   tableRows.innerHTML = `
     <h3>${escapeHtml(activeTable)}</h3>
-    <div class="table-wrap">${renderTable(info.rows, info.columns.map((column) => column.name))}</div>
+    <div class="table-wrap">${renderTable(info.rows, info.columns.map((column) => column.name), `db-${activeTable}`)}</div>
   `;
 }
 
@@ -611,19 +641,67 @@ function renderExamples() {
   });
 }
 
-function renderTable(rows, columns = null) {
+function renderTable(rows, columns = null, tableId = "table") {
   const tableColumns = columns || [...new Set(rows.flatMap((row) => Object.keys(row)))];
   if (!tableColumns.length) return `<div class="pretty-empty-list">No columns</div>`;
+  const pageCount = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+  const currentPage = Math.min(tablePages[tableId] || 0, pageCount - 1);
+  tablePages[tableId] = currentPage;
+  const start = currentPage * TABLE_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + TABLE_PAGE_SIZE);
+  const rangeStart = rows.length ? start + 1 : 0;
+  const rangeEnd = start + pageRows.length;
   return `
-    <table>
-      <thead><tr>${tableColumns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
-      <tbody>
-        ${rows
-          .map((row) => `<tr>${tableColumns.map((column) => `<td>${escapeHtml(formatScalar(row[column]))}</td>`).join("")}</tr>`)
-          .join("")}
-      </tbody>
-    </table>
+    <div class="paginated-table" data-table-id="${escapeHtml(tableId)}">
+      <table>
+        <thead><tr>${tableColumns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${pageRows
+            .map((row) => `<tr>${tableColumns.map((column) => `<td>${escapeHtml(formatScalar(row[column]))}</td>`).join("")}</tr>`)
+            .join("")}
+        </tbody>
+      </table>
+      ${pageCount > 1 ? `
+        <div class="table-pager">
+          <span>${rangeStart}-${rangeEnd} of ${rows.length}</span>
+          <div>
+            <button type="button" data-table-page="${escapeHtml(tableId)}" data-page="${Math.max(0, currentPage - 1)}" ${currentPage === 0 ? "disabled" : ""}>Previous</button>
+            <button type="button" data-table-page="${escapeHtml(tableId)}" data-page="${Math.min(pageCount - 1, currentPage + 1)}" ${currentPage === pageCount - 1 ? "disabled" : ""}>Next</button>
+          </div>
+        </div>
+      ` : ""}
+    </div>
   `;
+}
+
+function renderRawText(element, text, key) {
+  rawTexts[key] = text;
+  const lines = text.split("\n");
+  const expanded = element.dataset.expanded === "true";
+  const needsToggle = lines.length > RAW_TEXT_LINES || text.length > RAW_TEXT_CHARS;
+  element.textContent = needsToggle && !expanded ? collapseRawText(text, lines) : text;
+  let toggle = element.nextElementSibling;
+  if (!toggle || toggle.dataset.rawToggle !== key) {
+    toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "raw-toggle";
+    toggle.dataset.rawToggle = key;
+    element.insertAdjacentElement("afterend", toggle);
+  }
+  toggle.hidden = !needsToggle;
+  toggle.textContent = expanded ? "Show less" : `Show more (${formatHiddenRawAmount(text, lines)})`;
+}
+
+function collapseRawText(text, lines) {
+  if (lines.length > RAW_TEXT_LINES) {
+    return `${lines.slice(0, RAW_TEXT_LINES).join("\n")}\n...`;
+  }
+  return `${text.slice(0, RAW_TEXT_CHARS).trimEnd()}\n...`;
+}
+
+function formatHiddenRawAmount(text, lines) {
+  if (lines.length > RAW_TEXT_LINES) return `${lines.length - RAW_TEXT_LINES} more lines`;
+  return `${text.length - RAW_TEXT_CHARS} more chars`;
 }
 
 function syncSqlHighlight() {

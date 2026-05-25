@@ -22,6 +22,12 @@ const runDomainBtn = document.querySelector("#runDomainBtn");
 let state = { db: {}, models: [] };
 let activeTable = null;
 let domainConditionId = 0;
+let tablePages = {};
+let lastRunData = null;
+let rawTexts = {};
+const TABLE_PAGE_SIZE = 25;
+const RAW_TEXT_LINES = 24;
+const RAW_TEXT_CHARS = 2400;
 
 const selectExamples = {
   search_all: `# env['product.product'] means: open the Product model.
@@ -321,6 +327,25 @@ window.loadExample = loadExample;
 
 editor.addEventListener("input", syncCodeHighlight);
 editor.addEventListener("scroll", syncCodeScroll);
+document.addEventListener("click", (event) => {
+  const pageButton = event.target.closest("[data-table-page]");
+  if (pageButton) {
+    tablePages[pageButton.dataset.tablePage] = Number(pageButton.dataset.page);
+    if (lastRunData) {
+      renderChangeSummary(lastRunData);
+      renderPrettyOutput(lastRunData);
+    }
+    renderDb();
+    return;
+  }
+
+  const rawToggle = event.target.closest("[data-raw-toggle]");
+  if (rawToggle) {
+    const element = rawToggle.dataset.rawToggle === "ormSqlLog" ? sqlLog : output;
+    element.dataset.expanded = element.dataset.expanded === "true" ? "false" : "true";
+    renderRawText(element, rawTexts[rawToggle.dataset.rawToggle] || element.textContent, rawToggle.dataset.rawToggle);
+  }
+});
 
 function syncCodeHighlight() {
   codeHighlight.innerHTML = highlightPython(editor.value);
@@ -473,12 +498,16 @@ async function resetState() {
   renderModels();
   renderLessons();
   renderDomainBuilder();
-  output.textContent = "Database reset to seed data.";
+  lastRunData = null;
+  tablePages = {};
+  output.dataset.expanded = "false";
+  renderRawText(output, "Database reset to seed data.", "rawOutput");
   changeSummary.className = "change-summary empty";
   changeSummary.textContent = "Run create(), write(), unlink(), or command tuple examples to see database changes.";
   prettyOutput.className = "pretty-output empty";
   prettyOutput.textContent = "Run a snippet to see formatted results.";
-  sqlLog.textContent = "SQL statements will appear after running code.";
+  sqlLog.dataset.expanded = "false";
+  renderRawText(sqlLog, "SQL statements will appear after running code.", "ormSqlLog");
 }
 
 async function runCode() {
@@ -496,21 +525,52 @@ async function runCode() {
   });
   const data = await response.json();
   state.db = data.db;
+  lastRunData = data;
   statusBadge.textContent = data.status === "ok" ? "OK" : "Error";
   statusBadge.className = data.status;
-  output.textContent = formatOutput(data);
+  tablePages = {};
+  output.dataset.expanded = "false";
+  renderRawText(output, formatOutput(data), "rawOutput");
   renderChangeSummary(data);
   renderPrettyOutput(data);
-  sqlLog.textContent = data.sql.map((entry) => `${entry.sql}\nparams: ${JSON.stringify(entry.params)}`).join("\n\n");
+  sqlLog.dataset.expanded = "false";
+  renderRawText(sqlLog, data.sql.map((entry) => `${entry.sql}\nparams: ${JSON.stringify(entry.params)}`).join("\n\n"), "ormSqlLog");
   renderDb();
 }
 
 function formatOutput(data) {
   const parts = [];
-  if (data.output) parts.push(data.output.trimEnd());
+  const prettyText = data.error ? "" : formatPrettyRawOutput(data.pretty || []);
+  if (prettyText) parts.push(prettyText);
+  else if (data.output) parts.push(data.output.trimEnd());
   if (data.error) parts.push(`Friendly error: ${data.error}`);
   if (!parts.length) parts.push("(No printed output)");
   return parts.join("\n\n");
+}
+
+function formatPrettyRawOutput(items) {
+  return items
+    .map((item) => formatPrettyRawItem(item))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatPrettyRawItem(item) {
+  const args = item.args || [];
+  if (!args.length) return (item.text || "").trimEnd();
+  const firstArg = args[0];
+  const hasLabel = args.length > 1 && typeof firstArg === "string" && firstArg.length < 80;
+  const values = hasLabel ? args.slice(1) : args;
+  const formattedValues = values.map(formatRawValue).join(" ");
+  return hasLabel ? `${firstArg}\n${formattedValues}` : formattedValues;
+}
+
+function formatRawValue(value) {
+  if (Array.isArray(value) || isPlainObject(value) || (value && typeof value === "object")) {
+    return JSON.stringify(value, null, 2);
+  }
+  if (typeof value === "string") return value;
+  return formatScalar(value);
 }
 
 function renderPrettyOutput(data) {
@@ -550,13 +610,13 @@ function renderChangeSummary(data) {
 function renderTableChange(change) {
   const blocks = [];
   if (change.created?.length) {
-    blocks.push(renderChangedRows("Created rows", "created", change.created));
+    blocks.push(renderChangedRows("Created rows", "created", change.created, change.table));
   }
   if (change.updated?.length) {
     blocks.push(renderUpdatedRows(change.updated));
   }
   if (change.deleted?.length) {
-    blocks.push(renderChangedRows("Deleted rows", "deleted", change.deleted));
+    blocks.push(renderChangedRows("Deleted rows", "deleted", change.deleted, change.table));
   }
 
   return `
@@ -567,11 +627,11 @@ function renderTableChange(change) {
   `;
 }
 
-function renderChangedRows(title, type, rows) {
+function renderChangedRows(title, type, rows, tableName) {
   return `
     <section class="change-block ${type}">
       <h4>${escapeHtml(title)}</h4>
-      ${renderPrettyTable(rows)}
+      ${renderPrettyTable(rows, `change-${tableName}-${type}-${title}`)}
     </section>
   `;
 }
@@ -619,36 +679,36 @@ function renderPrettyItem(item, index) {
     <article class="pretty-card">
       <h3>${escapeHtml(title)}</h3>
       <div class="pretty-card-body">
-        ${values.length ? values.map(renderPrettyValue).join("") : `<p class="pretty-text">${escapeHtml(item.text || "")}</p>`}
+        ${values.length ? values.map((value, valueIndex) => renderPrettyValue(value, `pretty-${index}-${valueIndex}`)).join("") : `<p class="pretty-text">${escapeHtml(item.text || "")}</p>`}
       </div>
     </article>
   `;
 }
 
-function renderPrettyValue(value) {
+function renderPrettyValue(value, path = "pretty") {
   if (value && value.type === "recordset") {
     return `
       <div class="pretty-record-title">${escapeHtml(value.model)} <span>${escapeHtml(value.ids.length)} records</span></div>
-      ${renderPrettyValue(value.rows)}
+      ${renderPrettyValue(value.rows, `${path}-recordset`)}
     `;
   }
   if (value && value.type === "record") {
     return `
       <div class="pretty-record-title">${escapeHtml(value.model)},${escapeHtml(value.id)}</div>
-      ${renderPrettyValue(value.row)}
+      ${renderPrettyValue(value.row, `${path}-record`)}
     `;
   }
   if (Array.isArray(value)) {
     if (!value.length) return `<div class="pretty-empty-list">Empty list</div>`;
-    if (value.every(isPlainObject)) return renderPrettyTable(value);
-    if (value.every(Array.isArray)) return renderPrettyArrayTable(value);
-    return `<div class="pretty-list">${value.map((item) => `<div>${renderPrettyValue(item)}</div>`).join("")}</div>`;
+    if (value.every(isPlainObject)) return renderPrettyTable(value, `${path}-table`);
+    if (value.every(Array.isArray)) return renderPrettyArrayTable(value, `${path}-array-table`);
+    return `<div class="pretty-list">${value.map((item, index) => `<div>${renderPrettyValue(item, `${path}-${index}`)}</div>`).join("")}</div>`;
   }
   if (isPlainObject(value)) {
     return `
       <dl class="pretty-kv">
         ${Object.entries(value)
-          .map(([key, item]) => `<dt>${escapeHtml(key)}</dt><dd>${renderPrettyValue(item)}</dd>`)
+          .map(([key, item]) => `<dt>${escapeHtml(key)}</dt><dd>${renderPrettyValue(item, `${path}-${key}`)}</dd>`)
           .join("")}
       </dl>
     `;
@@ -656,37 +716,16 @@ function renderPrettyValue(value) {
   return `<span class="pretty-scalar">${escapeHtml(formatScalar(value))}</span>`;
 }
 
-function renderPrettyTable(rows) {
+function renderPrettyTable(rows, tableId = "pretty-table") {
   const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))];
-  return `
-    <div class="pretty-table-wrap">
-      <table class="pretty-table">
-        <thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
-        <tbody>
-          ${rows
-            .map((row) => `<tr>${columns.map((column) => `<td>${renderPrettyCell(row[column])}</td>`).join("")}</tr>`)
-            .join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
+  return `<div class="pretty-table-wrap">${renderPaginatedTable(rows, columns, tableId, "pretty-table")}</div>`;
 }
 
-function renderPrettyArrayTable(rows) {
+function renderPrettyArrayTable(rows, tableId = "pretty-array-table") {
   const columnCount = Math.max(...rows.map((row) => row.length));
   const columns = Array.from({ length: columnCount }, (_, index) => `Value ${index + 1}`);
-  return `
-    <div class="pretty-table-wrap">
-      <table class="pretty-table">
-        <thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
-        <tbody>
-          ${rows
-            .map((row) => `<tr>${columns.map((_, index) => `<td>${renderPrettyCell(row[index])}</td>`).join("")}</tr>`)
-            .join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
+  const objectRows = rows.map((row) => Object.fromEntries(columns.map((column, index) => [column, row[index]])));
+  return `<div class="pretty-table-wrap">${renderPaginatedTable(objectRows, columns, tableId, "pretty-table")}</div>`;
 }
 
 function renderPrettyCell(value) {
@@ -729,16 +768,71 @@ function renderDb() {
   tableRows.innerHTML = `
     <h3>${activeTable}</h3>
     <div class="table-wrap">
-      <table>
+      ${renderPaginatedTable(info.rows, columns, `db-${activeTable}`)}
+    </div>
+  `;
+}
+
+function renderPaginatedTable(rows, columns, tableId, tableClass = "") {
+  if (!columns.length) return `<div class="pretty-empty-list">No columns</div>`;
+  const pageCount = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+  const currentPage = Math.min(tablePages[tableId] || 0, pageCount - 1);
+  tablePages[tableId] = currentPage;
+  const start = currentPage * TABLE_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + TABLE_PAGE_SIZE);
+  const rangeStart = rows.length ? start + 1 : 0;
+  const rangeEnd = start + pageRows.length;
+  return `
+    <div class="paginated-table" data-table-id="${escapeHtml(tableId)}">
+      <table class="${escapeHtml(tableClass)}">
         <thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
         <tbody>
-          ${info.rows
-            .map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(row[column])}</td>`).join("")}</tr>`)
+          ${pageRows
+            .map((row) => `<tr>${columns.map((column) => `<td>${renderPrettyCell(row[column])}</td>`).join("")}</tr>`)
             .join("")}
         </tbody>
       </table>
+      ${pageCount > 1 ? `
+        <div class="table-pager">
+          <span>${rangeStart}-${rangeEnd} of ${rows.length}</span>
+          <div>
+            <button type="button" data-table-page="${escapeHtml(tableId)}" data-page="${Math.max(0, currentPage - 1)}" ${currentPage === 0 ? "disabled" : ""}>Previous</button>
+            <button type="button" data-table-page="${escapeHtml(tableId)}" data-page="${Math.min(pageCount - 1, currentPage + 1)}" ${currentPage === pageCount - 1 ? "disabled" : ""}>Next</button>
+          </div>
+        </div>
+      ` : ""}
     </div>
   `;
+}
+
+function renderRawText(element, text, key) {
+  rawTexts[key] = text;
+  const lines = text.split("\n");
+  const expanded = element.dataset.expanded === "true";
+  const needsToggle = lines.length > RAW_TEXT_LINES || text.length > RAW_TEXT_CHARS;
+  element.textContent = needsToggle && !expanded ? collapseRawText(text, lines) : text;
+  let toggle = element.nextElementSibling;
+  if (!toggle || toggle.dataset.rawToggle !== key) {
+    toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "raw-toggle";
+    toggle.dataset.rawToggle = key;
+    element.insertAdjacentElement("afterend", toggle);
+  }
+  toggle.hidden = !needsToggle;
+  toggle.textContent = expanded ? "Show less" : `Show more (${formatHiddenRawAmount(text, lines)})`;
+}
+
+function collapseRawText(text, lines) {
+  if (lines.length > RAW_TEXT_LINES) {
+    return `${lines.slice(0, RAW_TEXT_LINES).join("\n")}\n...`;
+  }
+  return `${text.slice(0, RAW_TEXT_CHARS).trimEnd()}\n...`;
+}
+
+function formatHiddenRawAmount(text, lines) {
+  if (lines.length > RAW_TEXT_LINES) return `${lines.length - RAW_TEXT_LINES} more lines`;
+  return `${text.length - RAW_TEXT_CHARS} more chars`;
 }
 
 function renderModels() {

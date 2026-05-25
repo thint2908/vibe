@@ -490,6 +490,38 @@ a.button-link:hover {
   color: var(--muted);
 }
 
+.table-pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 8px 10px;
+  background: var(--toolbar);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-pager > div {
+  display: flex;
+  gap: 6px;
+}
+
+.table-pager button,
+.raw-toggle {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.table-pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.raw-toggle {
+  margin: 8px 14px 12px;
+}
+
 #statusBadge {
   font-size: 13px;
   padding: 4px 8px;
