@@ -731,26 +731,154 @@ def init_db() -> None:
 
 
 def seed(db: Database) -> None:
-    db.executemany("INSERT INTO product_category (name) VALUES (?)", [("Electronics",), ("Furniture",), ("Services",)])
-    db.executemany("INSERT INTO product_tag (name) VALUES (?)", [("Featured",), ("Discountable",), ("Fragile",)])
+    category_names = [
+        "Electronics",
+        "Furniture",
+        "Services",
+        "Office Supplies",
+        "IT Equipment",
+        "Warehouse",
+        "Maintenance",
+        "Cleaning",
+        "Safety",
+        "Marketing",
+        "Packaging",
+        "Operations",
+    ]
+    tag_names = [
+        "Featured",
+        "Discountable",
+        "Fragile",
+        "Fast Moving",
+        "Slow Moving",
+        "Imported",
+        "Local",
+        "Warranty",
+        "Consumable",
+        "Seasonal",
+        "Bulk",
+        "Internal Use",
+    ]
+    db.executemany("INSERT INTO product_category (name) VALUES (?)", [(name,) for name in category_names])
+    db.executemany("INSERT INTO product_tag (name) VALUES (?)", [(name,) for name in tag_names])
+
+    product_rows = [
+        ("Laptop", "LAP001", 1200, 1),
+        ("Desk", "DSK001", 350, 2),
+        ("Consulting Hour", "SRV001", 100, 3),
+        ("Monitor", "MON001", 250, 1),
+    ]
+    product_templates = [
+        ("Laptop Pro 14", "LAP", 820, 1),
+        ("Desktop Workstation", "DSKPC", 640, 5),
+        ("LED Monitor 24", "MON", 155, 1),
+        ("Wireless Keyboard", "KEY", 28, 4),
+        ("Ergonomic Chair", "CHR", 145, 2),
+        ("Adjustable Desk", "ADK", 310, 2),
+        ("Network Switch", "SWT", 95, 5),
+        ("Barcode Scanner", "BSC", 120, 6),
+        ("Printer Toner", "TON", 42, 4),
+        ("Cleaning Kit", "CLN", 18, 8),
+        ("Safety Gloves", "GLV", 7, 9),
+        ("Packing Box", "BOX", 2.5, 11),
+        ("Maintenance Visit", "MNT", 85, 7),
+        ("SEO Campaign", "MKT", 450, 10),
+        ("Operations Audit", "OPS", 600, 12),
+    ]
+    for index in range(1, 297):
+        name, prefix, base_price, category_id = product_templates[(index - 1) % len(product_templates)]
+        variant = ((index - 1) // len(product_templates)) + 1
+        price = round(base_price * (1 + (index % 9) * 0.035) + variant * 3.75, 2)
+        product_rows.append((f"{name} {variant:02d}", f"{prefix}{index + 1:04d}", price, category_id))
     db.executemany(
         "INSERT INTO product_product (name, default_code, list_price, categ_id) VALUES (?, ?, ?, ?)",
-        [
-            ("Laptop", "LAP001", 1200, 1),
-            ("Desk", "DSK001", 350, 2),
-            ("Consulting Hour", "SRV001", 100, 3),
-            ("Monitor", "MON001", 250, 1),
-        ],
+        product_rows,
     )
-    db.executemany("INSERT INTO product_product_tag_rel (product_id, tag_id) VALUES (?, ?)", [(1, 1), (1, 3), (2, 2), (4, 1)])
+
+    tag_links = [(1, 1), (1, 3), (2, 2), (4, 1)]
+    for product_id in range(5, len(product_rows) + 1):
+        tag_links.append((product_id, ((product_id - 1) % len(tag_names)) + 1))
+        if product_id % 3 == 0:
+            tag_links.append((product_id, 2))
+        if product_id % 5 == 0:
+            tag_links.append((product_id, 8))
+        if product_id % 11 == 0:
+            tag_links.append((product_id, 11))
+    tag_links = sorted(set(tag_links))
+    db.executemany("INSERT INTO product_product_tag_rel (product_id, tag_id) VALUES (?, ?)", tag_links)
+
+    partner_rows = [
+        ("Azure Interior", "hello@azure.example"),
+        ("Deco Addict", "sales@deco.example"),
+    ]
+    company_words = [
+        "North",
+        "Bright",
+        "Urban",
+        "Delta",
+        "Prime",
+        "Green",
+        "Summit",
+        "Metro",
+        "Blue",
+        "Golden",
+        "Central",
+        "Pacific",
+        "Rapid",
+        "Ever",
+        "Fresh",
+        "Nova",
+        "United",
+        "Reliable",
+    ]
+    business_types = [
+        "Trading",
+        "Manufacturing",
+        "Retail",
+        "Logistics",
+        "Services",
+        "Foods",
+        "Construction",
+        "Consulting",
+        "Supplies",
+        "Distribution",
+        "Technology",
+        "Textiles",
+    ]
+    suffixes = ["Co", "Group", "Ltd", "Partners", "Company", "Studio"]
+    for index in range(1, 199):
+        name = (
+            f"{company_words[(index - 1) % len(company_words)]} "
+            f"{business_types[(index * 5) % len(business_types)]} "
+            f"{suffixes[(index * 7) % len(suffixes)]} {index:03d}"
+        )
+        email_name = name.lower().replace(" ", ".")
+        partner_rows.append((name, f"contact.{index:03d}@{email_name}.example"))
     db.executemany(
         "INSERT INTO res_partner (name, email) VALUES (?, ?)",
-        [("Azure Interior", "hello@azure.example"), ("Deco Addict", "sales@deco.example")],
+        partner_rows,
     )
-    db.executemany("INSERT INTO sale_order (name, partner_id) VALUES (?, ?)", [("SO001", 1), ("SO002", 2)])
+
+    order_rows = [("SO001", 1), ("SO002", 2)]
+    for index in range(3, 601):
+        partner_id = ((index * 37) % len(partner_rows)) + 1
+        order_rows.append((f"SO{index:03d}", partner_id))
+    db.executemany("INSERT INTO sale_order (name, partner_id) VALUES (?, ?)", order_rows)
+
+    line_rows = [(1, 1, 1, 1200), (1, 4, 2, 250), (2, 2, 1, 350)]
+    for order_id in range(3, len(order_rows) + 1):
+        line_count = 2 + (order_id % 4)
+        for line_index in range(line_count):
+            product_id = ((order_id * 13 + line_index * 17) % len(product_rows)) + 1
+            quantity = ((order_id + line_index * 3) % 9) + 1
+            if product_id == 3:
+                quantity = round(1 + ((order_id + line_index) % 6) * 0.5, 2)
+            product_price = product_rows[product_id - 1][2]
+            discount_factor = 1 - (((order_id + line_index) % 4) * 0.025)
+            line_rows.append((order_id, product_id, quantity, round(product_price * discount_factor, 2)))
     db.executemany(
         "INSERT INTO sale_order_line (order_id, product_id, quantity, price_unit) VALUES (?, ?, ?, ?)",
-        [(1, 1, 1, 1200), (1, 4, 2, 250), (2, 2, 1, 350)],
+        line_rows,
     )
 
 

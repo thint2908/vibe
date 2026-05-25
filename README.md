@@ -13,7 +13,7 @@ python app.py
 
 Open `http://127.0.0.1:5000`.
 
-The SQLite database is created automatically as `odoo_playground.sqlite3` on first run and seeded with products, categories, tags, partners, sale orders, and order lines.
+The SQLite database is created automatically as `odoo_playground.sqlite3` on first run and seeded with SME-style sample data: categories, tags, a few hundred products and partners, hundreds of sale orders, and thousands of order lines/relations.
 
 Open `http://127.0.0.1:5000/sql` for the SQL playground. It uses the same sample database so you can compare ORM behavior with the SQL underneath it.
 
